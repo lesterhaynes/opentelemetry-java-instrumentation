@@ -29,8 +29,7 @@ public class KafkaConsumerInstrumentation implements TypeInstrumentation {
 
   @Override
   public ElementMatcher<TypeDescription> typeMatcher() {
-    //return nameContains("Consumer").or(
-        return named("com.linkedin.kafka.clients.consumer.LiKafkaConsumerImpl");
+    return named("com.linkedin.kafka.clients.consumer.LiKafkaConsumerImpl");
   }
 
   @Override
