@@ -21,6 +21,7 @@ public class TracingIterator<K, V> implements Iterator<ConsumerRecord<K, V>> {
   private final Iterator<ConsumerRecord<K, V>> delegateIterator;
   private final Context parentContext;
   private final KafkaConsumerContext consumerContext;
+  private final boolean endTraceImmediately;
 
   /*
    * Note: this may potentially create problems if this iterator is used from different threads. But
@@ -31,19 +32,28 @@ public class TracingIterator<K, V> implements Iterator<ConsumerRecord<K, V>> {
   @Nullable private Scope currentScope;
 
   private TracingIterator(
-      Iterator<ConsumerRecord<K, V>> delegateIterator, KafkaConsumerContext consumerContext) {
+      Iterator<ConsumerRecord<K, V>> delegateIterator, KafkaConsumerContext consumerContext,
+      boolean endTraceImmediately) {
     this.delegateIterator = delegateIterator;
 
     Context receiveContext = consumerContext.getContext();
     // use the receive CONSUMER as parent if it's available
     this.parentContext = receiveContext != null ? receiveContext : Context.current();
     this.consumerContext = consumerContext;
+    this.endTraceImmediately = endTraceImmediately;
+  }
+
+
+  public static <K,V> Iterator<ConsumerRecord<K, V>> wrap(
+      Iterator<ConsumerRecord<K, V>> delegateIterator, KafkaConsumerContext consumerContext) {
+    return wrap(delegateIterator, consumerContext, false);
   }
 
   public static <K, V> Iterator<ConsumerRecord<K, V>> wrap(
-      Iterator<ConsumerRecord<K, V>> delegateIterator, KafkaConsumerContext consumerContext) {
+      Iterator<ConsumerRecord<K, V>> delegateIterator, KafkaConsumerContext consumerContext,
+      boolean endTraceImmediately) {
     if (KafkaClientsConsumerProcessTracing.wrappingEnabled()) {
-      return new TracingIterator<>(delegateIterator, consumerContext);
+      return new TracingIterator<>(delegateIterator, consumerContext, endTraceImmediately);
     }
     return delegateIterator;
   }
@@ -69,6 +79,9 @@ public class TracingIterator<K, V> implements Iterator<ConsumerRecord<K, V>> {
       currentRequest = KafkaProcessRequest.create(consumerContext, next);
       currentContext = consumerProcessInstrumenter().start(parentContext, currentRequest);
       currentScope = currentContext.makeCurrent();
+    }
+    if (endTraceImmediately) {
+      closeScopeAndEndSpan();
     }
     return next;
   }
